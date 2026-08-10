@@ -32,6 +32,13 @@ header{
   border-bottom:1px solid var(--line);
   position:sticky; top:0; z-index:5; backdrop-filter:blur(6px);
   background:rgba(246,245,241,.92);
+  display:flex; align-items:baseline; justify-content:space-between;
+}
+header .title-block{ display:flex; flex-direction:column; }
+header .version-badge{
+  font-size:10.5px; color:var(--ink-soft); font-weight:600;
+  border:1px solid var(--line); border-radius:999px; padding:3px 9px;
+  background:#fff; white-space:nowrap;
 }
 header .eyebrow{
   font-size:11px; letter-spacing:.14em; text-transform:uppercase;
@@ -138,8 +145,11 @@ canvas{ width:100% !important; height:220px !important; }
 <body>
 
 <header>
-  <div class="eyebrow">Lab Tracker</div>
-  <h1>検査値トラッカー</h1>
+  <div class="title-block">
+    <div class="eyebrow">Lab Tracker</div>
+    <h1>検査値トラッカー</h1>
+  </div>
+  <span class="version-badge" id="versionBadge"></span>
 </header>
 
 <main>
@@ -173,14 +183,30 @@ canvas{ width:100% !important; height:220px !important; }
         <button class="btn-ghost" id="cancelPreviewBtn" style="flex:1;">取消</button>
       </div>
     </div>
+
+    <div class="card">
+      <h2>身長・体重を記録</h2>
+      <p class="hint">検査結果とは別に、いつでも手動で記録できます。どちらか一方だけの入力も可能です。</p>
+      <label class="field">記録日</label>
+      <input type="date" id="hwDate">
+      <label class="field">身長（cm）</label>
+      <input type="text" id="hwHeight" inputmode="decimal" placeholder="例: 115.2">
+      <label class="field">体重（kg）</label>
+      <input type="text" id="hwWeight" inputmode="decimal" placeholder="例: 20.5">
+      <div class="btn-row">
+        <button class="btn-primary" id="saveHwBtn" style="flex:1;">記録する</button>
+      </div>
+      <div class="status" id="hwStatus"></div>
+    </div>
   </section>
 
   <!-- ============ VIEW: グラフ ============ -->
   <section id="view-graph" class="view">
     <div class="card">
-      <h2>項目を選択</h2>
-      <p class="hint">検査項目をタップすると推移グラフを表示します（赤枠は基準値の異常歴あり）。</p>
+      <h2>項目を選択（最大3つ）</h2>
+      <p class="hint">検査項目をタップすると推移グラフに重ねて表示します（赤枠は基準値の異常歴あり）。</p>
       <div class="chip-row" id="itemChips"></div>
+      <div class="status" id="chipStatus"></div>
     </div>
     <div class="card" id="chartCard" style="display:none;">
       <h2 id="chartTitle">推移</h2>
@@ -232,6 +258,18 @@ canvas{ width:100% !important; height:220px !important; }
       </div>
       <div class="status" id="dataStatus"></div>
     </div>
+    <div class="card">
+      <h2>このアプリについて</h2>
+      <div class="record-item">
+        <div>バージョン</div>
+        <div class="meta" id="aboutVersion"></div>
+      </div>
+      <div class="record-item">
+        <div>Service Worker</div>
+        <div class="meta" id="aboutSw">確認中…</div>
+      </div>
+      <p class="small-note">更新後に古い表示のままの場合は、一度アプリを完全に閉じて開き直してください。それでも変わらない場合はブラウザの設定からこのサイトのキャッシュを削除してください。</p>
+    </div>
   </section>
 
 </main>
@@ -252,6 +290,29 @@ if(window.pdfjsLib){
 }
 </script>
 <script>
+/* ================= Version ================= */
+// Bump on every meaningful change to index.html; keep in sync with CACHE in sw.js.
+const APP_VERSION = '1.4.0';
+document.getElementById('versionBadge').textContent = 'v' + APP_VERSION;
+window.addEventListener('DOMContentLoaded', ()=>{
+  const av = document.getElementById('aboutVersion');
+  if(av) av.textContent = 'v' + APP_VERSION;
+  const hwDate = document.getElementById('hwDate');
+  if(hwDate) hwDate.value = new Date().toISOString().slice(0,10);
+});
+(async ()=>{
+  const swEl = document.getElementById('aboutSw');
+  if(!swEl) return;
+  try{
+    if('serviceWorker' in navigator){
+      const reg = await navigator.serviceWorker.getRegistration();
+      swEl.textContent = reg ? '有効（更新済み）' : '未登録';
+    } else {
+      swEl.textContent = '非対応';
+    }
+  }catch(e){ swEl.textContent = '確認不可'; }
+})();
+
 /* ================= Storage ================= */
 const STORE_KEY = 'labtracker_records_v1';
 const CFG_KEY = 'labtracker_config_v1';
@@ -545,18 +606,54 @@ document.getElementById('cancelPreviewBtn').addEventListener('click', ()=>{
 document.getElementById('saveRecordBtn').addEventListener('click', ()=>{
   if(!pendingExtraction) return;
   const date = document.getElementById('editDate').value || new Date().toISOString().slice(0,10);
-  const recs = loadRecords();
-  recs.push({ id: Date.now(), date, items: pendingExtraction.items || [] });
-  recs.sort((a,b)=> a.date.localeCompare(b.date));
-  saveRecords(recs);
+  mergeItemsIntoDate(date, pendingExtraction.items || []);
   pendingExtraction = null;
   document.getElementById('previewCard').style.display = 'none';
   showStatus('ocrStatus','ok','保存しました。「グラフ」タブで推移を確認できます。');
 });
 
+// Adds items to the record for a given date, merging into an existing same-date
+// record (replacing same-named items) rather than creating duplicate date entries.
+function mergeItemsIntoDate(date, newItems){
+  const recs = loadRecords();
+  const existing = recs.find(r => r.date === date);
+  if(existing){
+    newItems.forEach(ni=>{
+      const idx = existing.items.findIndex(it => it.name === ni.name);
+      if(idx >= 0) existing.items[idx] = ni; else existing.items.push(ni);
+    });
+  } else {
+    recs.push({ id: Date.now(), date, items: newItems });
+  }
+  recs.sort((a,b)=> a.date.localeCompare(b.date));
+  saveRecords(recs);
+}
+
+document.getElementById('saveHwBtn').addEventListener('click', ()=>{
+  const date = document.getElementById('hwDate').value || new Date().toISOString().slice(0,10);
+  const h = document.getElementById('hwHeight').value.trim();
+  const w = document.getElementById('hwWeight').value.trim();
+  if(!h && !w){
+    showStatus('hwStatus','error','身長または体重のどちらかを入力してください。');
+    return;
+  }
+  if((h && isNaN(parseFloat(h))) || (w && isNaN(parseFloat(w)))){
+    showStatus('hwStatus','error','数値で入力してください。');
+    return;
+  }
+  const items = [];
+  if(h) items.push({ name:'身長', value:h, flag:'', ref:'', unit:'cm' });
+  if(w) items.push({ name:'体重', value:w, flag:'', ref:'', unit:'kg' });
+  mergeItemsIntoDate(date, items);
+  document.getElementById('hwHeight').value = '';
+  document.getElementById('hwWeight').value = '';
+  showStatus('hwStatus','ok','記録しました。「グラフ」タブで推移を確認できます。');
+});
+
 /* ================= Graph view ================= */
 let chartInstance = null;
-let selectedItem = null;
+let selectedItems = []; // up to 3 item names, in selection order
+const CHART_COLORS = ['#3E7C8C', '#B3432B', '#B5651D'];
 
 function renderGraphView(){
   const recs = loadRecords();
@@ -565,18 +662,34 @@ function renderGraphView(){
     const prev = names.get(it.name) || false;
     names.set(it.name, prev || it.flag === 'H' || it.flag === 'L');
   }));
+  // drop any previously-selected names that no longer exist
+  selectedItems = selectedItems.filter(n => names.has(n));
+
   const chipRow = document.getElementById('itemChips');
   chipRow.innerHTML = '';
   [...names.keys()].sort().forEach(name=>{
     const chip = document.createElement('button');
-    chip.className = 'chip' + (names.get(name) ? ' flagged' : '') + (name===selectedItem?' active':'');
+    const isActive = selectedItems.includes(name);
+    chip.className = 'chip' + (names.get(name) ? ' flagged' : '') + (isActive ? ' active' : '');
     chip.textContent = name;
-    chip.addEventListener('click', ()=>{ selectedItem = name; renderGraphView(); });
+    chip.addEventListener('click', ()=>{
+      if(isActive){
+        selectedItems = selectedItems.filter(n => n !== name);
+      } else {
+        if(selectedItems.length >= 3){
+          showStatus('chipStatus','error','グラフに重ねられるのは最大3項目までです。');
+          return;
+        }
+        selectedItems.push(name);
+      }
+      document.getElementById('chipStatus').classList.remove('show');
+      renderGraphView();
+    });
     chipRow.appendChild(chip);
   });
 
-  if(selectedItem && names.has(selectedItem)){
-    drawChart(recs, selectedItem);
+  if(selectedItems.length){
+    drawChart(recs, selectedItems);
   } else {
     document.getElementById('chartCard').style.display = 'none';
   }
@@ -584,49 +697,71 @@ function renderGraphView(){
   renderRecordList(recs);
 }
 
-function drawChart(recs, name){
-  const points = recs
-    .map(r => ({ date:r.date, item: r.items.find(i=>i.name===name) }))
-    .filter(p => p.item && p.item.value !== '' && !isNaN(parseFloat(p.item.value)));
-  document.getElementById('chartCard').style.display = points.length ? 'block' : 'none';
-  document.getElementById('chartTitle').textContent = name + ' の推移';
-  const unit = points.length ? (points[points.length-1].item.unit||'') : '';
-  const ref = points.length ? (points[points.length-1].item.ref||'') : '';
-  const refRange = parseRef(ref);
-
+function drawChart(recs, names){
   const ctx = document.getElementById('trendChart').getContext('2d');
   if(chartInstance) chartInstance.destroy();
 
-  const datasets = [{
-    label: name,
-    data: points.map(p => parseFloat(p.item.value)),
-    borderColor: '#3E7C8C',
-    backgroundColor: '#3E7C8C',
-    pointBackgroundColor: points.map(p => p.item.flag ? '#B3432B' : '#3E7C8C'),
-    pointRadius: 4,
-    tension: 0.25,
-  }];
-  if(refRange){
+  const allLabelsSet = new Set();
+  const seriesData = names.map(name=>{
+    const points = recs
+      .map(r => ({ date:r.date, item: r.items.find(i=>i.name===name) }))
+      .filter(p => p.item && p.item.value !== '' && !isNaN(parseFloat(p.item.value)));
+    points.forEach(p => allLabelsSet.add(p.date));
+    return { name, points };
+  });
+  const labels = [...allLabelsSet].sort();
+
+  document.getElementById('chartCard').style.display = labels.length ? 'block' : 'none';
+  document.getElementById('chartTitle').textContent = names.join(' / ') + ' の推移';
+
+  const scales = {};
+  const datasets = [];
+  const notes = [];
+
+  seriesData.forEach((s, idx)=>{
+    const color = CHART_COLORS[idx % CHART_COLORS.length];
+    const valueByDate = new Map(s.points.map(p => [p.date, parseFloat(p.item.value)]));
+    const unit = s.points.length ? (s.points[s.points.length-1].item.unit||'') : '';
+    const ref = s.points.length ? (s.points[s.points.length-1].item.ref||'') : '';
+    const axisId = 'y' + idx;
+
     datasets.push({
-      label:'基準値上限', data: points.map(()=>refRange.max), borderColor:'#DCE1DF',
-      borderDash:[4,4], pointRadius:0, fill:false
+      label: s.name,
+      data: labels.map(d => valueByDate.has(d) ? valueByDate.get(d) : null),
+      spanGaps: true,
+      borderColor: color,
+      backgroundColor: color,
+      pointBackgroundColor: labels.map(d=>{
+        const it = s.points.find(p=>p.date===d);
+        return it && it.item.flag ? '#B3432B' : color;
+      }),
+      pointRadius: 4,
+      tension: 0.25,
+      yAxisID: axisId,
     });
-    datasets.push({
-      label:'基準値下限', data: points.map(()=>refRange.min), borderColor:'#DCE1DF',
-      borderDash:[4,4], pointRadius:0, fill:false
-    });
-  }
+
+    scales[axisId] = {
+      type:'linear',
+      position: idx === 0 ? 'left' : 'right',
+      offset: idx > 1,
+      title: { display: !!unit, text: unit },
+      grid: { drawOnChartArea: idx === 0 },
+      ticks: { color }
+    };
+
+    notes.push(`${s.name}: ${ref ? '基準値 ' + ref + ' ' + unit : '基準値情報なし'}`);
+  });
 
   chartInstance = new Chart(ctx, {
     type:'line',
-    data:{ labels: points.map(p=>p.date), datasets },
+    data:{ labels, datasets },
     options:{
       responsive:true, maintainAspectRatio:false,
-      plugins:{ legend:{ display:false } },
-      scales:{ y:{ title:{ display:!!unit, text:unit } } }
+      plugins:{ legend:{ display: names.length > 1 } },
+      scales
     }
   });
-  document.getElementById('rangeNote').textContent = ref ? `基準値: ${ref} ${unit}` : '基準値情報なし';
+  document.getElementById('rangeNote').textContent = notes.join('　|　');
 }
 
 function parseRef(ref){
