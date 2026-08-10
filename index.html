@@ -148,12 +148,18 @@ canvas{ width:100% !important; height:220px !important; }
   <section id="view-add" class="view active">
     <div class="card">
       <h2><span class="num">1</span>検査結果を追加</h2>
-      <p class="hint">検体検査結果報告書などの写真・PDFのスクリーンショットを選択してください。Gemini APIで表を自動読み取りします（設定タブでAPIキー登録が必要）。</p>
+      <p class="hint">検体検査結果報告書の写真、またはPDFファイルを選択してください。</p>
+      <label class="field">読み取り方法</label>
+      <select id="extractMethod">
+        <option value="ocr">内蔵OCR（APIキー不要・オフライン処理）</option>
+        <option value="gemini">Gemini API（要APIキー・高精度）</option>
+      </select>
+      <p class="small-note">内蔵OCRは同じ様式の報告書向けの簡易読み取りです。誤読があれば次のステップで直接修正できます。</p>
       <div class="dropzone" id="dropzone">
-        <strong>タップして画像を選択</strong>
-        カメラ撮影 / 写真ライブラリから選べます
+        <strong>タップして画像 / PDFを選択</strong>
+        カメラ撮影・写真ライブラリ・PDFファイルから選べます
       </div>
-      <input type="file" id="fileInput" accept="image/*">
+      <input type="file" id="fileInput" accept="image/*,application/pdf">
       <div class="status" id="ocrStatus"></div>
     </div>
 
@@ -202,7 +208,7 @@ canvas{ width:100% !important; height:220px !important; }
   <section id="view-settings" class="view">
     <div class="card">
       <h2>Gemini API 設定</h2>
-      <p class="hint">Google AI StudioでGemini APIキーを発行し、下に登録してください。キーはこの端末のブラウザ内にのみ保存され、外部送信はGemini API呼び出し時のみです。</p>
+      <p class="hint">検査結果の読み取り自体は内蔵OCRで完結するため必須ではありません。「考察」機能を使う場合、またはOCRより高精度な読み取りをしたい場合のみ、Google AI StudioでGemini APIキーを発行して登録してください。キーはこの端末のブラウザ内にのみ保存されます。</p>
       <label class="field">APIキー</label>
       <input type="password" id="apiKeyInput" placeholder="AIza...">
       <label class="field">モデル名</label>
@@ -238,6 +244,13 @@ canvas{ width:100% !important; height:220px !important; }
 </nav>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.0.4/tesseract.min.js"></script>
+<script>
+if(window.pdfjsLib){
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+}
+</script>
 <script>
 /* ================= Storage ================= */
 const STORE_KEY = 'labtracker_records_v1';
@@ -333,14 +346,28 @@ let pendingExtraction = null;
 async function handleFile(e){
   const file = e.target.files[0];
   if(!file) return;
-  const cfg = loadCfg();
+  const method = document.getElementById('extractMethod').value;
   document.getElementById('previewCard').style.display = 'none';
-  showStatus('ocrStatus','info','<span class="spinner"></span>Geminiで読み取り中…');
-  document.getElementById('ocrStatus').querySelector ? null : null;
   try{
-    if(!cfg.apiKey) throw new Error('先に設定タブでGemini APIキーを登録してください。');
-    const base64 = await fileToBase64(file);
-    const prompt = `これは血液検査・尿検査などの検体検査結果報告書の画像です。
+    const parsed = (method === 'gemini')
+      ? await extractViaGemini(file)
+      : await extractViaOcr(file);
+    pendingExtraction = parsed;
+    showPreview(parsed);
+    showStatus('ocrStatus','ok','読み取りが完了しました。内容を確認して保存してください。');
+  }catch(err){
+    showStatus('ocrStatus','error','読み取りに失敗しました：' + err.message);
+  }
+  fileInput.value = '';
+}
+
+/* ---- Method A: Gemini API ---- */
+async function extractViaGemini(file){
+  const cfg = loadCfg();
+  showStatus('ocrStatus','info','<span class="spinner"></span>Geminiで読み取り中…');
+  if(!cfg.apiKey) throw new Error('先に設定タブでGemini APIキーを登録してください。');
+  const base64 = await fileToBase64(file);
+  const prompt = `これは血液検査・尿検査などの検体検査結果報告書の画像またはPDFです（複数ページの場合は全ページを対象にしてください）。
 表内の各検査項目について「検査項目名」「測定値」「基準値」「単位」を読み取り、次のJSON形式のみで出力してください。前置きや説明文、マークダウンのコードフェンスは一切不要です。
 
 {
@@ -351,19 +378,147 @@ async function handleFile(e){
 }
 
 数値でない項目（陰性/陽性など）はvalueにそのまま文字列を入れてください。基準値欄が空欄の項目はrefを空文字にしてください。`;
-    const text = await callGemini(cfg, [
-      { text: prompt },
-      { inline_data: { mime_type: file.type || 'image/jpeg', data: base64 } }
-    ]);
-    const jsonStr = text.trim().replace(/^```json/i,'').replace(/^```/,'').replace(/```$/,'').trim();
-    const parsed = JSON.parse(jsonStr);
-    pendingExtraction = parsed;
-    showPreview(parsed);
-    showStatus('ocrStatus','ok','読み取りが完了しました。内容を確認して保存してください。');
-  }catch(err){
-    showStatus('ocrStatus','error','読み取りに失敗しました：' + err.message);
+  const text = await callGemini(cfg, [
+    { text: prompt },
+    { inline_data: { mime_type: file.type || 'image/jpeg', data: base64 } }
+  ]);
+  const jsonStr = text.trim().replace(/^```json/i,'').replace(/^```/,'').replace(/```$/,'').trim();
+  return JSON.parse(jsonStr);
+}
+
+/* ---- Method B: built-in OCR (no API key) ---- */
+async function extractViaOcr(file){
+  showStatus('ocrStatus','info','<span class="spinner"></span>OCR準備中…（初回は言語データの取得に時間がかかります）');
+  const canvases = await fileToPageCanvases(file);
+  let allItems = [];
+  let dateStr = '';
+  for(let i=0;i<canvases.length;i++){
+    showStatus('ocrStatus','info',`<span class="spinner"></span>OCR実行中… (${i+1}/${canvases.length}ページ)`);
+    const { items, date } = await ocrCanvas(canvases[i]);
+    allItems = allItems.concat(items);
+    if(!dateStr && date) dateStr = date;
   }
-  fileInput.value = '';
+  return { date: dateStr, items: allItems };
+}
+
+async function fileToPageCanvases(file){
+  if(file.type === 'application/pdf'){
+    const buf = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+    const canvases = [];
+    for(let p=1; p<=pdf.numPages; p++){
+      const page = await pdf.getPage(p);
+      const viewport = page.getViewport({ scale: 2.2 });
+      const canvas = document.createElement('canvas');
+      canvas.width = viewport.width; canvas.height = viewport.height;
+      await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+      canvases.push(canvas);
+    }
+    return canvases;
+  }else{
+    const img = await loadImageFile(file);
+    const canvas = document.createElement('canvas');
+    canvas.width = img.width; canvas.height = img.height;
+    canvas.getContext('2d').drawImage(img,0,0);
+    return [canvas];
+  }
+}
+
+function loadImageFile(file){
+  return new Promise((resolve,reject)=>{
+    const img = new Image();
+    img.onload = ()=> resolve(img);
+    img.onerror = reject;
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+// This report format is a two-column table per page; splitting left/right keeps row alignment
+// clean for OCR. If a different layout is used, extraction quality may drop — always review
+// the preview step before saving.
+async function ocrCanvas(canvas){
+  const fullCtx = canvas.getContext('2d');
+  const fullData = fullCtx.getImageData(0,0,canvas.width,canvas.height);
+
+  // header strip (top ~18%) for date, run once on full width for readability
+  const headerCanvas = document.createElement('canvas');
+  headerCanvas.width = canvas.width; headerCanvas.height = Math.floor(canvas.height*0.18);
+  headerCanvas.getContext('2d').drawImage(canvas,0,0);
+  const headerResult = await Tesseract.recognize(headerCanvas, 'jpn+eng');
+  const date = extractDate(headerResult.data.text);
+
+  const halves = [
+    cropCanvas(canvas, 0, 0, Math.ceil(canvas.width*0.52), canvas.height),
+    cropCanvas(canvas, Math.floor(canvas.width*0.48), 0, Math.ceil(canvas.width*0.52), canvas.height)
+  ];
+
+  let items = [];
+  for(const half of halves){
+    const result = await Tesseract.recognize(half, 'jpn+eng');
+    items = items.concat(linesToItems(groupWordsIntoLines(result.data.words || [])));
+  }
+  return { items, date };
+}
+
+function cropCanvas(src, x, y, w, h){
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  c.getContext('2d').drawImage(src, x, y, w, h, 0, 0, w, h);
+  return c;
+}
+
+function extractDate(text){
+  const m = text.match(/採取日?\s*[:：]?\s*(\d{4})[年\/\-](\d{1,2})[月\/\-](\d{1,2})/);
+  if(m) return `${m[1]}-${String(m[2]).padStart(2,'0')}-${String(m[3]).padStart(2,'0')}`;
+  return '';
+}
+
+function groupWordsIntoLines(words){
+  if(!words || !words.length) return [];
+  const sorted = [...words].sort((a,b)=> a.bbox.y0 - b.bbox.y0);
+  const lines = [];
+  const tol = 14;
+  sorted.forEach(w=>{
+    const cy = (w.bbox.y0 + w.bbox.y1)/2;
+    let line = lines.find(l => Math.abs(l.y - cy) < tol);
+    if(!line){ line = { y: cy, words: [] }; lines.push(line); }
+    line.words.push(w);
+  });
+  lines.forEach(l => l.words.sort((a,b)=> a.bbox.x0 - b.bbox.x0));
+  return lines.map(l => l.words.map(w=>w.text).join(' ').trim()).filter(Boolean);
+}
+
+const UNIT_RE = /^[a-zA-Zμ%℃][a-zA-Zμ%℃0-9\/\.\^]*$/;
+const FLAG_RE = /^(HH|LL|H|L)$/;
+const VALUE_RE = /^\(?[-+±]?\d+\.?\d*\)?$/;
+const REF_RE = /^[\d.]+\s*[-~]\s*[\d.]+$|以下$|以上$/;
+
+function linesToItems(lines){
+  const items = [];
+  lines.forEach(line=>{
+    const tokens = line.split(/\s+/).filter(Boolean);
+    if(tokens.length < 2) return;
+    let i = 0;
+    const nameTokens = [];
+    while(i < tokens.length && !VALUE_RE.test(tokens[i]) && !/^\(?[-±+]\)?$/.test(tokens[i])){
+      nameTokens.push(tokens[i]); i++;
+    }
+    if(!nameTokens.length || i >= tokens.length) return; // couldn't find a value token
+    const name = nameTokens.join('');
+    const value = tokens[i].replace(/[()]/g,''); i++;
+    let flag = '';
+    if(i < tokens.length && FLAG_RE.test(tokens[i])){ flag = tokens[i]; i++; }
+    let ref = '';
+    const rest = tokens.slice(i).join(' ');
+    const refMatch = rest.match(/([\d.]+\s*[-~]\s*[\d.]+|[\d.]+\s*以下|[\d.]+\s*以上)/);
+    if(refMatch){ ref = refMatch[1].replace(/\s+/g,''); }
+    let unit = '';
+    const tail = tokens[tokens.length-1];
+    if(UNIT_RE.test(tail) && tail !== value) unit = tail;
+    if(!name || name.length > 20) return; // guard against garbage lines
+    items.push({ name, value, flag, ref, unit });
+  });
+  return items;
 }
 
 function showPreview(parsed){
