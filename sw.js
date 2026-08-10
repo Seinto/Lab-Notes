@@ -1,6 +1,6 @@
 // Bump this string every time index.html / app logic changes so old caches
 // are dropped automatically instead of silently serving a stale version.
-const CACHE = 'labtracker-v1.4.0';
+const CACHE = 'labtracker-v1.5.0';
 const ASSETS = ['./', './index.html', './manifest.json'];
 
 self.addEventListener('install', e => {
