@@ -1,6 +1,4 @@
-// Bump this string every time index.html / app logic changes so old caches
-// are dropped automatically instead of silently serving a stale version.
-const CACHE = 'labtracker-v1.5.0';
+const CACHE = 'labtracker-v1.6.0';
 const ASSETS = ['./', './index.html', './manifest.json'];
 
 self.addEventListener('install', e => {
@@ -16,10 +14,7 @@ self.addEventListener('activate', e => {
 });
 
 self.addEventListener('fetch', e => {
-  // Never cache Gemini API calls.
   if (e.request.url.includes('generativelanguage.googleapis.com')) return;
-  // Network-first for the app shell itself so updates show up immediately;
-  // cache-first for everything else (CDN libs, icons) to save bandwidth offline.
   const isAppShell = ASSETS.some(a => e.request.url.endsWith(a.replace('./','')) || e.request.url.endsWith('/'));
   if (isAppShell) {
     e.respondWith(
@@ -37,4 +32,3 @@ self.addEventListener('fetch', e => {
     );
   }
 });
-
