@@ -55,6 +55,36 @@ main{ padding:18px 16px 8px; max-width:640px; margin:0 auto; }
 }
 .card h2{ margin:0 0 12px; font-size:15px; font-weight:700; color:var(--ink); }
 .card h2 .num{ color:var(--accent); font-weight:700; margin-right:6px; }
+
+.h2-row{ display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+.h2-row h2{ margin:0; }
+.info-btn{
+  width:22px; height:22px; border-radius:50%; border:1.4px solid var(--accent);
+  background:#fff; color:var(--accent); font-size:12px; font-weight:700; font-style:italic;
+  padding:0; line-height:1; cursor:pointer; flex-shrink:0;
+}
+
+.modal-overlay{
+  display:none; position:fixed; inset:0; background:rgba(18,48,59,.55);
+  z-index:50; align-items:flex-end; justify-content:center;
+}
+.modal-overlay.show{ display:flex; }
+.modal-card{
+  background:var(--paper-raised); width:100%; max-width:640px;
+  border-radius:18px 18px 0 0; padding:20px 20px calc(20px + env(safe-area-inset-bottom));
+  max-height:82vh; overflow-y:auto;
+}
+.modal-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+.modal-head h3{ margin:0; font-size:16px; font-weight:700; }
+.modal-close{
+  width:28px; height:28px; border-radius:50%; border:none; background:#F1F1EE;
+  color:var(--ink-soft); font-size:16px; cursor:pointer; padding:0; line-height:1;
+}
+.modal-body{ font-size:13.5px; line-height:1.85; color:var(--ink); }
+.modal-body ol{ padding-left:20px; margin:8px 0; }
+.modal-body li{ margin-bottom:8px; }
+.modal-body a{ color:var(--accent); }
+.modal-body .note{ font-size:12px; color:var(--ink-soft); margin-top:12px; padding-top:12px; border-top:1px solid var(--line); }
 p.hint{ font-size:12.5px; color:var(--ink-soft); line-height:1.6; margin:6px 0 12px; }
 
 .dropzone{
@@ -222,7 +252,10 @@ canvas{ width:100% !important; height:220px !important; }
   <!-- ============ VIEW: 考察 ============ -->
   <section id="view-ai" class="view">
     <div class="card">
-      <h2>Geminiによる考察</h2>
+      <div class="h2-row">
+        <h2>Geminiによる考察</h2>
+        <button class="info-btn" data-info="gemini" aria-label="Geminiの使い方">i</button>
+      </div>
       <p class="hint">保存済みの検査データ全体をもとに、傾向や気になる点をGeminiに整理させます。医師の診断に代わるものではありません。</p>
       <button class="btn-primary" id="runAnalysisBtn">考察を生成</button>
       <div class="status" id="aiStatus"></div>
@@ -233,7 +266,10 @@ canvas{ width:100% !important; height:220px !important; }
   <!-- ============ VIEW: 設定 ============ -->
   <section id="view-settings" class="view">
     <div class="card">
-      <h2>Gemini API 設定</h2>
+      <div class="h2-row">
+        <h2>Gemini API 設定</h2>
+        <button class="info-btn" data-info="gemini" aria-label="Geminiの使い方">i</button>
+      </div>
       <p class="hint">検査結果の読み取り自体は内蔵OCRで完結するため必須ではありません。「考察」機能を使う場合、またはOCRより高精度な読み取りをしたい場合のみ、Google AI StudioでGemini APIキーを発行して登録してください。キーはこの端末のブラウザ内にのみ保存されます。</p>
       <label class="field">APIキー</label>
       <input type="password" id="apiKeyInput" placeholder="AIza...">
@@ -281,6 +317,16 @@ canvas{ width:100% !important; height:220px !important; }
   <button class="tab" data-view="view-settings"><span class="dot"></span>設定</button>
 </nav>
 
+<div class="modal-overlay" id="infoModalOverlay">
+  <div class="modal-card">
+    <div class="modal-head">
+      <h3 id="infoModalTitle">Geminiの使い方</h3>
+      <button class="modal-close" id="infoModalClose" aria-label="閉じる">×</button>
+    </div>
+    <div class="modal-body" id="infoModalBody"></div>
+  </div>
+</div>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.0.4/tesseract.min.js"></script>
@@ -290,9 +336,50 @@ if(window.pdfjsLib){
 }
 </script>
 <script>
+/* ================= Info modal ================= */
+const INFO_CONTENT = {
+  gemini: {
+    title: 'Geminiの使い方',
+    html: `
+      <p>Gemini APIキーを登録すると、①検査結果の高精度読み取り、②保存データの考察生成が使えるようになります（どちらも任意機能で、記録・グラフ機能自体には不要です）。</p>
+      <ol>
+        <li><a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a> にGoogleアカウントでログインする。</li>
+        <li>「Create API key」（APIキーを作成）をタップし、新しいキーを発行する。</li>
+        <li>表示された <code>AIza...</code> から始まる文字列をコピーする。</li>
+        <li>このアプリの「設定」タブを開き、「APIキー」欄に貼り付けて「保存」をタップする。</li>
+        <li>「接続テスト」で正常に接続できるか確認する。</li>
+        <li>「記録」タブで読み取り方法を「Gemini API」に切り替えると高精度読み取りが使え、「考察」タブでは常にGeminiが使われます。</li>
+      </ol>
+      <div class="note">
+        ・APIキーはこの端末のブラウザ内にのみ保存され、Gemini APIへの通信以外には送信されません。<br>
+        ・無料枠には1分あたり／1日あたりのリクエスト数上限があり、超えると「429エラー」が出ます。その場合は少し時間を置くか、Google AI Studioで課金を有効にしてください。<br>
+        ・考察結果は一般的な情報整理であり、医師の診断・指示に代わるものではありません。
+      </div>
+    `
+  }
+};
+
+function openInfoModal(key){
+  const info = INFO_CONTENT[key];
+  if(!info) return;
+  document.getElementById('infoModalTitle').textContent = info.title;
+  document.getElementById('infoModalBody').innerHTML = info.html;
+  document.getElementById('infoModalOverlay').classList.add('show');
+}
+function closeInfoModal(){
+  document.getElementById('infoModalOverlay').classList.remove('show');
+}
+document.querySelectorAll('.info-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=> openInfoModal(btn.dataset.info));
+});
+document.getElementById('infoModalClose').addEventListener('click', closeInfoModal);
+document.getElementById('infoModalOverlay').addEventListener('click', (e)=>{
+  if(e.target.id === 'infoModalOverlay') closeInfoModal();
+});
+
 /* ================= Version ================= */
 // Bump on every meaningful change to index.html; keep in sync with CACHE in sw.js.
-const APP_VERSION = '1.4.0';
+const APP_VERSION = '1.5.0';
 document.getElementById('versionBadge').textContent = 'v' + APP_VERSION;
 window.addEventListener('DOMContentLoaded', ()=>{
   const av = document.getElementById('aboutVersion');
