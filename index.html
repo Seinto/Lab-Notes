@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>検査値トラッカー</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#12303B">
+<style>
+:root{
+  --ink:#12303B;        /* deep clinical teal */
+  --ink-soft:#2E5563;
+  --paper:#F6F5F1;      /* soft clinical white */
+  --paper-raised:#FFFFFF;
+  --line:#DCE1DF;
+  --accent:#3E7C8C;     /* muted teal accent */
+  --accent-2:#B5651D;   /* warm clay for "H" flags */
+  --flag-h:#B3432B;
+  --flag-l:#3060A8;
+  --ok:#3E7C8C;
+  --radius:14px;
+  font-family:"Hiragino Sans","Yu Gothic",system-ui,sans-serif;
+}
+*{box-sizing:border-box;}
+body{
+  margin:0; background:var(--paper); color:var(--ink);
+  -webkit-font-smoothing:antialiased;
+  padding-bottom:84px;
+}
+header{
+  padding:22px 20px 16px; background:var(--paper);
+  border-bottom:1px solid var(--line);
+  position:sticky; top:0; z-index:5; backdrop-filter:blur(6px);
+  background:rgba(246,245,241,.92);
+}
+header .eyebrow{
+  font-size:11px; letter-spacing:.14em; text-transform:uppercase;
+  color:var(--accent); font-weight:600; margin-bottom:2px;
+}
+header h1{
+  margin:0; font-size:21px; font-weight:700; letter-spacing:.01em;
+  font-feature-settings:"palt";
+}
+main{ padding:18px 16px 8px; max-width:640px; margin:0 auto; }
+.card{
+  background:var(--paper-raised); border:1px solid var(--line);
+  border-radius:var(--radius); padding:18px; margin-bottom:16px;
+}
+.card h2{ margin:0 0 12px; font-size:15px; font-weight:700; color:var(--ink); }
+.card h2 .num{ color:var(--accent); font-weight:700; margin-right:6px; }
+p.hint{ font-size:12.5px; color:var(--ink-soft); line-height:1.6; margin:6px 0 12px; }
+
+.dropzone{
+  border:1.5px dashed var(--accent); border-radius:var(--radius);
+  padding:26px 14px; text-align:center; cursor:pointer;
+  color:var(--ink-soft); font-size:13.5px; transition:background .15s;
+}
+.dropzone:active{ background:#EEF3F2; }
+.dropzone strong{ color:var(--ink); display:block; font-size:14.5px; margin-bottom:4px; }
+input[type=file]{ display:none; }
+
+button{
+  font-family:inherit; border:none; border-radius:10px; padding:11px 16px;
+  font-size:14px; font-weight:600; cursor:pointer; letter-spacing:.01em;
+}
+.btn-primary{ background:var(--ink); color:#fff; width:100%; }
+.btn-primary:disabled{ background:#9AA9AC; }
+.btn-ghost{ background:transparent; color:var(--accent); border:1px solid var(--line); }
+.btn-danger{ background:transparent; color:var(--flag-h); border:1px solid var(--line); }
+.btn-row{ display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; }
+
+label.field{ display:block; font-size:12.5px; color:var(--ink-soft); margin:12px 0 5px; font-weight:600; }
+input[type=text], input[type=password], input[type=date], select{
+  width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:9px;
+  font-size:14px; background:#fff; color:var(--ink); font-family:inherit;
+}
+
+.status{ font-size:12.5px; margin-top:10px; padding:9px 12px; border-radius:8px; display:none; }
+.status.show{ display:block; }
+.status.info{ background:#EAF2F1; color:var(--ink-soft); }
+.status.error{ background:#FBE9E5; color:var(--flag-h); }
+.status.ok{ background:#E9F3EC; color:#2A6B45; }
+
+.spinner{
+  width:15px; height:15px; border:2px solid #ffffff55; border-top-color:#fff;
+  border-radius:50%; display:inline-block; vertical-align:-3px; margin-right:7px;
+  animation:spin .7s linear infinite;
+}
+@keyframes spin{ to{ transform:rotate(360deg);} }
+
+table.preview{ width:100%; border-collapse:collapse; font-size:12.5px; margin-top:10px; }
+table.preview th, table.preview td{ padding:6px 6px; border-bottom:1px solid var(--line); text-align:left; }
+table.preview th{ color:var(--ink-soft); font-weight:600; font-size:11px; text-transform:uppercase; letter-spacing:.04em; }
+.flagH{ color:var(--flag-h); font-weight:700; }
+.flagL{ color:var(--flag-l); font-weight:700; }
+
+.chip-row{ display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+.chip{
+  font-size:12px; padding:6px 10px; border-radius:999px; border:1px solid var(--line);
+  background:#fff; color:var(--ink-soft); cursor:pointer; white-space:nowrap;
+}
+.chip.active{ background:var(--ink); color:#fff; border-color:var(--ink); }
+.chip.flagged{ border-color:var(--flag-h); color:var(--flag-h); }
+
+canvas{ width:100% !important; height:220px !important; }
+
+.record-item{
+  display:flex; justify-content:space-between; align-items:center;
+  padding:10px 0; border-bottom:1px solid var(--line); font-size:13.5px;
+}
+.record-item:last-child{ border-bottom:none; }
+.record-item .meta{ color:var(--ink-soft); font-size:11.5px; }
+.record-item .del{ color:var(--flag-h); font-size:12px; background:none; border:none; padding:4px 6px; }
+
+.tabs{
+  position:fixed; bottom:0; left:0; right:0; display:flex;
+  background:#fff; border-top:1px solid var(--line); z-index:10;
+  padding-bottom:env(safe-area-inset-bottom);
+}
+.tab{
+  flex:1; text-align:center; padding:12px 4px 10px; font-size:11.5px;
+  color:var(--ink-soft); background:none; border:none; font-weight:600;
+}
+.tab.active{ color:var(--ink); }
+.tab .dot{ display:block; width:5px; height:5px; border-radius:50%; background:transparent; margin:0 auto 5px; }
+.tab.active .dot{ background:var(--accent); }
+
+.view{ display:none; }
+.view.active{ display:block; }
+
+.commentary{
+  font-size:13.5px; line-height:1.85; white-space:pre-wrap;
+  background:#F1F4F0; border-radius:10px; padding:14px; margin-top:10px;
+}
+.small-note{ font-size:11px; color:var(--ink-soft); margin-top:8px; line-height:1.6; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="eyebrow">Lab Tracker</div>
+  <h1>検査値トラッカー</h1>
+</header>
+
+<main>
+
+  <!-- ============ VIEW: 記録 ============ -->
+  <section id="view-add" class="view active">
+    <div class="card">
+      <h2><span class="num">1</span>検査結果を追加</h2>
+      <p class="hint">検体検査結果報告書などの写真・PDFのスクリーンショットを選択してください。Gemini APIで表を自動読み取りします（設定タブでAPIキー登録が必要）。</p>
+      <div class="dropzone" id="dropzone">
+        <strong>タップして画像を選択</strong>
+        カメラ撮影 / 写真ライブラリから選べます
+      </div>
+      <input type="file" id="fileInput" accept="image/*">
+      <div class="status" id="ocrStatus"></div>
+    </div>
+
+    <div class="card" id="previewCard" style="display:none;">
+      <h2><span class="num">2</span>読み取り結果の確認</h2>
+      <label class="field">採取日</label>
+      <input type="date" id="editDate">
+      <table class="preview" id="previewTable"></table>
+      <div class="btn-row">
+        <button class="btn-primary" id="saveRecordBtn" style="flex:2;">この内容で保存</button>
+        <button class="btn-ghost" id="cancelPreviewBtn" style="flex:1;">取消</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ VIEW: グラフ ============ -->
+  <section id="view-graph" class="view">
+    <div class="card">
+      <h2>項目を選択</h2>
+      <p class="hint">検査項目をタップすると推移グラフを表示します（赤枠は基準値の異常歴あり）。</p>
+      <div class="chip-row" id="itemChips"></div>
+    </div>
+    <div class="card" id="chartCard" style="display:none;">
+      <h2 id="chartTitle">推移</h2>
+      <canvas id="trendChart"></canvas>
+      <div class="small-note" id="rangeNote"></div>
+    </div>
+    <div class="card">
+      <h2>記録一覧</h2>
+      <div id="recordList"></div>
+    </div>
+  </section>
+
+  <!-- ============ VIEW: 考察 ============ -->
+  <section id="view-ai" class="view">
+    <div class="card">
+      <h2>Geminiによる考察</h2>
+      <p class="hint">保存済みの検査データ全体をもとに、傾向や気になる点をGeminiに整理させます。医師の診断に代わるものではありません。</p>
+      <button class="btn-primary" id="runAnalysisBtn">考察を生成</button>
+      <div class="status" id="aiStatus"></div>
+      <div class="commentary" id="aiOutput" style="display:none;"></div>
+    </div>
+  </section>
+
+  <!-- ============ VIEW: 設定 ============ -->
+  <section id="view-settings" class="view">
+    <div class="card">
+      <h2>Gemini API 設定</h2>
+      <p class="hint">Google AI StudioでGemini APIキーを発行し、下に登録してください。キーはこの端末のブラウザ内にのみ保存され、外部送信はGemini API呼び出し時のみです。</p>
+      <label class="field">APIキー</label>
+      <input type="password" id="apiKeyInput" placeholder="AIza...">
+      <label class="field">モデル名</label>
+      <input type="text" id="modelInput" placeholder="gemini-2.0-flash">
+      <div class="btn-row">
+        <button class="btn-primary" id="saveKeyBtn" style="flex:2;">保存</button>
+        <button class="btn-ghost" id="testKeyBtn" style="flex:1;">接続テスト</button>
+      </div>
+      <div class="status" id="keyStatus"></div>
+    </div>
+    <div class="card">
+      <h2>データ管理</h2>
+      <p class="hint">全記録はこの端末のブラウザ内（localStorage）にのみ保存されます。機種変更・再インストール前にはバックアップを推奨します。</p>
+      <div class="btn-row">
+        <button class="btn-ghost" id="exportBtn">JSONで書き出し</button>
+        <button class="btn-ghost" id="importBtn">JSONを読み込み</button>
+      </div>
+      <input type="file" id="importFile" accept="application/json" style="display:none;">
+      <div class="btn-row">
+        <button class="btn-danger" id="clearAllBtn">全データを削除</button>
+      </div>
+      <div class="status" id="dataStatus"></div>
+    </div>
+  </section>
+
+</main>
+
+<nav class="tabs">
+  <button class="tab active" data-view="view-add"><span class="dot"></span>記録</button>
+  <button class="tab" data-view="view-graph"><span class="dot"></span>グラフ</button>
+  <button class="tab" data-view="view-ai"><span class="dot"></span>考察</button>
+  <button class="tab" data-view="view-settings"><span class="dot"></span>設定</button>
+</nav>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<script>
+/* ================= Storage ================= */
+const STORE_KEY = 'labtracker_records_v1';
+const CFG_KEY = 'labtracker_config_v1';
+
+function loadRecords(){
+  try{ return JSON.parse(localStorage.getItem(STORE_KEY)) || []; }catch(e){ return []; }
+}
+function saveRecords(recs){ localStorage.setItem(STORE_KEY, JSON.stringify(recs)); }
+function loadCfg(){
+  try{ return JSON.parse(localStorage.getItem(CFG_KEY)) || {}; }catch(e){ return {}; }
+}
+function saveCfg(cfg){ localStorage.setItem(CFG_KEY, JSON.stringify(cfg)); }
+
+/* ================= Tabs ================= */
+document.querySelectorAll('.tab').forEach(t=>{
+  t.addEventListener('click', ()=>{
+    document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+    document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));
+    t.classList.add('active');
+    document.getElementById(t.dataset.view).classList.add('active');
+    if(t.dataset.view === 'view-graph') renderGraphView();
+  });
+});
+
+/* ================= Settings ================= */
+const apiKeyInput = document.getElementById('apiKeyInput');
+const modelInput = document.getElementById('modelInput');
+(function initSettings(){
+  const cfg = loadCfg();
+  apiKeyInput.value = cfg.apiKey || '';
+  modelInput.value = cfg.model || 'gemini-2.0-flash';
+})();
+document.getElementById('saveKeyBtn').addEventListener('click', ()=>{
+  saveCfg({ apiKey: apiKeyInput.value.trim(), model: modelInput.value.trim() || 'gemini-2.0-flash' });
+  showStatus('keyStatus','ok','保存しました。');
+});
+document.getElementById('testKeyBtn').addEventListener('click', async ()=>{
+  const cfg = { apiKey: apiKeyInput.value.trim(), model: modelInput.value.trim() || 'gemini-2.0-flash' };
+  showStatus('keyStatus','info','接続確認中…');
+  try{
+    await callGemini(cfg, [{ text: 'こんにちは、と一言だけ日本語で返してください。' }]);
+    showStatus('keyStatus','ok','接続に成功しました。');
+  }catch(e){
+    showStatus('keyStatus','error','接続に失敗しました：' + e.message);
+  }
+});
+
+function showStatus(id, type, msg){
+  const el = document.getElementById(id);
+  el.textContent = msg;
+  el.className = 'status show ' + type;
+}
+
+/* ================= Gemini call helper ================= */
+async function callGemini(cfg, parts){
+  if(!cfg.apiKey) throw new Error('APIキーが未登録です。設定タブで登録してください。');
+  const model = cfg.model || 'gemini-2.0-flash';
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(cfg.apiKey)}`;
+  const res = await fetch(url, {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ contents:[{ role:'user', parts }] })
+  });
+  if(!res.ok){
+    const t = await res.text();
+    throw new Error(`HTTP ${res.status}: ${t.slice(0,200)}`);
+  }
+  const data = await res.json();
+  const cand = data.candidates && data.candidates[0];
+  const text = cand && cand.content && cand.content.parts ? cand.content.parts.map(p=>p.text||'').join('') : '';
+  if(!text) throw new Error('応答が空でした。');
+  return text;
+}
+
+function fileToBase64(file){
+  return new Promise((resolve,reject)=>{
+    const r = new FileReader();
+    r.onload = ()=> resolve(r.result.split(',')[1]);
+    r.onerror = reject;
+    r.readAsDataURL(file);
+  });
+}
+
+/* ================= Upload & OCR extraction ================= */
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+dropzone.addEventListener('click', ()=> fileInput.click());
+fileInput.addEventListener('change', handleFile);
+
+let pendingExtraction = null;
+
+async function handleFile(e){
+  const file = e.target.files[0];
+  if(!file) return;
+  const cfg = loadCfg();
+  document.getElementById('previewCard').style.display = 'none';
+  showStatus('ocrStatus','info','<span class="spinner"></span>Geminiで読み取り中…');
+  document.getElementById('ocrStatus').querySelector ? null : null;
+  try{
+    if(!cfg.apiKey) throw new Error('先に設定タブでGemini APIキーを登録してください。');
+    const base64 = await fileToBase64(file);
+    const prompt = `これは血液検査・尿検査などの検体検査結果報告書の画像です。
+表内の各検査項目について「検査項目名」「測定値」「基準値」「単位」を読み取り、次のJSON形式のみで出力してください。前置きや説明文、マークダウンのコードフェンスは一切不要です。
+
+{
+  "date": "YYYY-MM-DD (採取日。読み取れない場合は空文字)",
+  "items": [
+    {"name": "項目名", "value": "測定値（数値部分のみ、H/L等の記号は除く）", "flag": "H, L, または空文字", "ref": "基準値（例: 6.70-8.30）", "unit": "単位"}
+  ]
+}
+
+数値でない項目（陰性/陽性など）はvalueにそのまま文字列を入れてください。基準値欄が空欄の項目はrefを空文字にしてください。`;
+    const text = await callGemini(cfg, [
+      { text: prompt },
+      { inline_data: { mime_type: file.type || 'image/jpeg', data: base64 } }
+    ]);
+    const jsonStr = text.trim().replace(/^```json/i,'').replace(/^```/,'').replace(/```$/,'').trim();
+    const parsed = JSON.parse(jsonStr);
+    pendingExtraction = parsed;
+    showPreview(parsed);
+    showStatus('ocrStatus','ok','読み取りが完了しました。内容を確認して保存してください。');
+  }catch(err){
+    showStatus('ocrStatus','error','読み取りに失敗しました：' + err.message);
+  }
+  fileInput.value = '';
+}
+
+function showPreview(parsed){
+  document.getElementById('editDate').value = parsed.date || '';
+  const tbl = document.getElementById('previewTable');
+  let html = '<tr><th>項目</th><th>値</th><th>基準値</th><th>単位</th></tr>';
+  (parsed.items||[]).forEach(it=>{
+    const flagClass = it.flag === 'H' ? 'flagH' : (it.flag === 'L' ? 'flagL' : '');
+    html += `<tr><td>${escapeHtml(it.name)}</td><td class="${flagClass}">${escapeHtml(it.value)}${it.flag?' '+it.flag:''}</td><td>${escapeHtml(it.ref||'')}</td><td>${escapeHtml(it.unit||'')}</td></tr>`;
+  });
+  tbl.innerHTML = html;
+  document.getElementById('previewCard').style.display = 'block';
+}
+
+function escapeHtml(s){
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+document.getElementById('cancelPreviewBtn').addEventListener('click', ()=>{
+  pendingExtraction = null;
+  document.getElementById('previewCard').style.display = 'none';
+});
+
+document.getElementById('saveRecordBtn').addEventListener('click', ()=>{
+  if(!pendingExtraction) return;
+  const date = document.getElementById('editDate').value || new Date().toISOString().slice(0,10);
+  const recs = loadRecords();
+  recs.push({ id: Date.now(), date, items: pendingExtraction.items || [] });
+  recs.sort((a,b)=> a.date.localeCompare(b.date));
+  saveRecords(recs);
+  pendingExtraction = null;
+  document.getElementById('previewCard').style.display = 'none';
+  showStatus('ocrStatus','ok','保存しました。「グラフ」タブで推移を確認できます。');
+});
+
+/* ================= Graph view ================= */
+let chartInstance = null;
+let selectedItem = null;
+
+function renderGraphView(){
+  const recs = loadRecords();
+  const names = new Map(); // name -> hasFlag
+  recs.forEach(r => r.items.forEach(it=>{
+    const prev = names.get(it.name) || false;
+    names.set(it.name, prev || it.flag === 'H' || it.flag === 'L');
+  }));
+  const chipRow = document.getElementById('itemChips');
+  chipRow.innerHTML = '';
+  [...names.keys()].sort().forEach(name=>{
+    const chip = document.createElement('button');
+    chip.className = 'chip' + (names.get(name) ? ' flagged' : '') + (name===selectedItem?' active':'');
+    chip.textContent = name;
+    chip.addEventListener('click', ()=>{ selectedItem = name; renderGraphView(); });
+    chipRow.appendChild(chip);
+  });
+
+  if(selectedItem && names.has(selectedItem)){
+    drawChart(recs, selectedItem);
+  } else {
+    document.getElementById('chartCard').style.display = 'none';
+  }
+
+  renderRecordList(recs);
+}
+
+function drawChart(recs, name){
+  const points = recs
+    .map(r => ({ date:r.date, item: r.items.find(i=>i.name===name) }))
+    .filter(p => p.item && p.item.value !== '' && !isNaN(parseFloat(p.item.value)));
+  document.getElementById('chartCard').style.display = points.length ? 'block' : 'none';
+  document.getElementById('chartTitle').textContent = name + ' の推移';
+  const unit = points.length ? (points[points.length-1].item.unit||'') : '';
+  const ref = points.length ? (points[points.length-1].item.ref||'') : '';
+  const refRange = parseRef(ref);
+
+  const ctx = document.getElementById('trendChart').getContext('2d');
+  if(chartInstance) chartInstance.destroy();
+
+  const datasets = [{
+    label: name,
+    data: points.map(p => parseFloat(p.item.value)),
+    borderColor: '#3E7C8C',
+    backgroundColor: '#3E7C8C',
+    pointBackgroundColor: points.map(p => p.item.flag ? '#B3432B' : '#3E7C8C'),
+    pointRadius: 4,
+    tension: 0.25,
+  }];
+  if(refRange){
+    datasets.push({
+      label:'基準値上限', data: points.map(()=>refRange.max), borderColor:'#DCE1DF',
+      borderDash:[4,4], pointRadius:0, fill:false
+    });
+    datasets.push({
+      label:'基準値下限', data: points.map(()=>refRange.min), borderColor:'#DCE1DF',
+      borderDash:[4,4], pointRadius:0, fill:false
+    });
+  }
+
+  chartInstance = new Chart(ctx, {
+    type:'line',
+    data:{ labels: points.map(p=>p.date), datasets },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ display:false } },
+      scales:{ y:{ title:{ display:!!unit, text:unit } } }
+    }
+  });
+  document.getElementById('rangeNote').textContent = ref ? `基準値: ${ref} ${unit}` : '基準値情報なし';
+}
+
+function parseRef(ref){
+  if(!ref) return null;
+  const m = ref.match(/([\-\d.]+)\s*[-~]\s*([\-\d.]+)/);
+  if(m) return { min: parseFloat(m[1]), max: parseFloat(m[2]) };
+  return null;
+}
+
+function renderRecordList(recs){
+  const list = document.getElementById('recordList');
+  if(!recs.length){ list.innerHTML = '<p class="hint">まだ記録がありません。</p>'; return; }
+  list.innerHTML = '';
+  [...recs].reverse().forEach(r=>{
+    const flagCount = r.items.filter(i=>i.flag).length;
+    const row = document.createElement('div');
+    row.className = 'record-item';
+    row.innerHTML = `<div><div>${r.date}</div><div class="meta">${r.items.length}項目${flagCount?` ・ 異常値 ${flagCount}件`:''}</div></div>`;
+    const del = document.createElement('button');
+    del.className = 'del'; del.textContent = '削除';
+    del.addEventListener('click', ()=>{
+      if(!confirm(`${r.date} の記録を削除しますか？`)) return;
+      saveRecords(loadRecords().filter(x=>x.id!==r.id));
+      renderGraphView();
+    });
+    row.appendChild(del);
+    list.appendChild(row);
+  });
+}
+
+/* ================= AI commentary ================= */
+document.getElementById('runAnalysisBtn').addEventListener('click', async ()=>{
+  const cfg = loadCfg();
+  const recs = loadRecords();
+  const out = document.getElementById('aiOutput');
+  out.style.display = 'none';
+  if(!recs.length){ showStatus('aiStatus','error','記録データがありません。'); return; }
+  showStatus('aiStatus','info','<span class="spinner"></span>考察を生成中…');
+  try{
+    const summary = recs.map(r=>{
+      const items = r.items.map(i=> `${i.name}: ${i.value}${i.flag?'('+i.flag+')':''} [基準値:${i.ref||'-'} ${i.unit||''}]`).join(', ');
+      return `■ ${r.date}\n${items}`;
+    }).join('\n\n');
+    const prompt = `以下は同一人物の検体検査結果の時系列データです。医療従事者ではなく、記録を見返す保護者/本人向けに、下記の観点で日本語で簡潔にまとめてください。
+- 基準値から外れている項目とその推移（改善/悪化/横ばい）
+- 複数回にわたり基準値外が続いている項目があれば特に触れる
+- 全体的な傾向として気になる点
+- 最後に必ず「これは一般的な情報整理であり、医師の診断・指示に代わるものではありません。次回受診時に主治医に相談してください」という趣旨の一文を入れる
+
+データ:
+${summary}`;
+    const text = await callGemini(cfg, [{ text: prompt }]);
+    out.textContent = text;
+    out.style.display = 'block';
+    showStatus('aiStatus','ok','生成が完了しました。');
+  }catch(e){
+    showStatus('aiStatus','error','生成に失敗しました：' + e.message);
+  }
+});
+
+/* ================= Data management ================= */
+document.getElementById('exportBtn').addEventListener('click', ()=>{
+  const blob = new Blob([JSON.stringify(loadRecords(), null, 2)], { type:'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `labtracker_backup_${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+});
+document.getElementById('importBtn').addEventListener('click', ()=> document.getElementById('importFile').click());
+document.getElementById('importFile').addEventListener('change', async (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  try{
+    const text = await file.text();
+    const imported = JSON.parse(text);
+    if(!Array.isArray(imported)) throw new Error('形式が不正です');
+    const existing = loadRecords();
+    const ids = new Set(existing.map(r=>r.id));
+    imported.forEach(r=>{ if(!ids.has(r.id)) existing.push(r); });
+    existing.sort((a,b)=>a.date.localeCompare(b.date));
+    saveRecords(existing);
+    showStatus('dataStatus','ok','読み込みました。');
+  }catch(err){
+    showStatus('dataStatus','error','読み込みに失敗しました：' + err.message);
+  }
+  e.target.value = '';
+});
+document.getElementById('clearAllBtn').addEventListener('click', ()=>{
+  if(!confirm('全ての記録データを削除します。よろしいですか？')) return;
+  saveRecords([]);
+  showStatus('dataStatus','ok','削除しました。');
+  renderGraphView();
+});
+
+/* ================= PWA: service worker ================= */
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{
+    navigator.serviceWorker.register('sw.js').catch(()=>{ /* offline install optional */ });
+  });
+}
+</script>
+</body>
+</html>
