@@ -188,7 +188,7 @@ canvas{ width:100% !important; height:220px !important; }
   <section id="view-add" class="view active">
     <div class="card">
       <h2><span class="num">1</span>検査結果を追加</h2>
-      <p class="hint">検体検査結果報告書の写真、またはPDFファイルを選択してください。</p>
+      <p class="hint">検体検査結果報告書の写真、またはPDFファイルを選択してください（未記載の項目は自動で無視されます）。</p>
       <label class="field">読み取り方法</label>
       <select id="extractMethod">
         <option value="ocr">内蔵OCR（APIキー不要・オフライン処理）</option>
@@ -233,8 +233,8 @@ canvas{ width:100% !important; height:220px !important; }
   <!-- ============ VIEW: グラフ ============ -->
   <section id="view-graph" class="view">
     <div class="card">
-      <h2>項目を選択（最大3つ）</h2>
-      <p class="hint">検査項目をタップすると推移グラフに重ねて表示します（赤枠は基準値の異常歴あり）。</p>
+      <h2>項目を選択</h2>
+      <p class="hint">検査項目をタップすると推移グラフに重ねて表示します（身長・体重・CRE・eGFR・Ca・Li・Na・PHはデフォルト選択）。</p>
       <div class="chip-row" id="itemChips"></div>
       <div class="status" id="chipStatus"></div>
     </div>
@@ -253,10 +253,25 @@ canvas{ width:100% !important; height:220px !important; }
   <section id="view-ai" class="view">
     <div class="card">
       <div class="h2-row">
+        <h2>患者情報（AI考察用）</h2>
+      </div>
+      <p class="hint">年齢や病名を入力しておくと、Geminiによる考察の精度が向上します。</p>
+      <label class="field">年齢</label>
+      <input type="text" id="patientAge" placeholder="例: 38歳 または 10歳">
+      <label class="field">病名・主訴</label>
+      <input type="text" id="patientDisease" placeholder="例: 慢性腎臓病、経過観察 など">
+      <div class="btn-row" style="margin-top:10px;">
+        <button class="btn-ghost" id="savePatientInfoBtn">患者情報を保存</button>
+      </div>
+      <div class="status" id="patientStatus"></div>
+    </div>
+
+    <div class="card">
+      <div class="h2-row">
         <h2>Geminiによる考察</h2>
         <button class="info-btn" data-info="gemini" aria-label="Geminiの使い方">i</button>
       </div>
-      <p class="hint">保存済みの検査データ全体をもとに、傾向や気になる点をGeminiに整理させます。医師の診断に代わるものではありません。</p>
+      <p class="hint">保存済みの検査データおよび患者情報をもとに、傾向や気になる点をGeminiに整理させます。医師の診断に代わるものではありません。</p>
       <button class="btn-primary" id="runAnalysisBtn">考察を生成</button>
       <div class="status" id="aiStatus"></div>
       <div class="commentary" id="aiOutput" style="display:none;"></div>
@@ -270,26 +285,40 @@ canvas{ width:100% !important; height:220px !important; }
         <h2>Gemini API 設定</h2>
         <button class="info-btn" data-info="gemini" aria-label="Geminiの使い方">i</button>
       </div>
-      <p class="hint">検査結果の読み取り自体は内蔵OCRで完結するため必須ではありません。「考察」機能を使う場合、またはOCRより高精度な読み取りをしたい場合のみ、Google AI StudioでGemini APIキーを発行して登録してください。キーはこの端末のブラウザ内にのみ保存されます。</p>
+      <p class="hint">検査結果の読み取り自体は内蔵OCRで完結するため必須ではありません。「考察」機能を使う場合、またはOCRより高精度な読み取りをしたい場合のみ、Google AI StudioでGemini APIキーを発行して登録してください。</p>
       <label class="field">APIキー</label>
       <input type="password" id="apiKeyInput" placeholder="AIza...">
       <label class="field">モデル名</label>
-      <input type="text" id="modelInput" placeholder="gemini-2.0-flash">
+      <input type="text" id="modelInput" placeholder="gemini-flash-lite-latest">
       <div class="btn-row">
         <button class="btn-primary" id="saveKeyBtn" style="flex:2;">保存</button>
         <button class="btn-ghost" id="testKeyBtn" style="flex:1;">接続テスト</button>
       </div>
       <div class="status" id="keyStatus"></div>
     </div>
+
+    <div class="card">
+      <h2>Googleスプレッドシート連携</h2>
+      <p class="hint">作成したGoogle Apps Script (GAS) WebアプリのURLを登録すると、アプリ内の全データを指定のスプレッドシートにワンタップで送信・登録できます。</p>
+      <label class="field">GAS Webアプリ URL</label>
+      <input type="text" id="gasUrlInput" placeholder="https://script.google.com/macros/s/.../exec">
+      <div class="btn-row">
+        <button class="btn-ghost" id="saveGasUrlBtn">URLを保存</button>
+        <button class="btn-primary" id="syncSheetsBtn">スプレッドシートに登録</button>
+      </div>
+      <div class="status" id="sheetsStatus"></div>
+    </div>
+
     <div class="card">
       <h2>データ管理</h2>
-      <p class="hint">全記録はこの端末のブラウザ内（localStorage）にのみ保存されます。機種変更・再インストール前にはバックアップを推奨します。</p>
+      <p class="hint">全記録はこの端末のブラウザ内（localStorage）にのみ保存されます。</p>
       <div class="btn-row">
+        <button class="btn-ghost" id="exportCsvBtn">CSVで書き出し</button>
         <button class="btn-ghost" id="exportBtn">JSONで書き出し</button>
         <button class="btn-ghost" id="importBtn">JSONを読み込み</button>
       </div>
       <input type="file" id="importFile" accept="application/json" style="display:none;">
-      <div class="btn-row">
+      <div class="btn-row" style="margin-top:10px;">
         <button class="btn-danger" id="clearAllBtn">全データを削除</button>
       </div>
       <div class="status" id="dataStatus"></div>
@@ -304,7 +333,6 @@ canvas{ width:100% !important; height:220px !important; }
         <div>Service Worker</div>
         <div class="meta" id="aboutSw">確認中…</div>
       </div>
-      <p class="small-note">更新後に古い表示のままの場合は、一度アプリを完全に閉じて開き直してください。それでも変わらない場合はブラウザの設定からこのサイトのキャッシュを削除してください。</p>
     </div>
   </section>
 
@@ -341,20 +369,13 @@ const INFO_CONTENT = {
   gemini: {
     title: 'Geminiの使い方',
     html: `
-      <p>Gemini APIキーを登録すると、①検査結果の高精度読み取り、②保存データの考察生成が使えるようになります（どちらも任意機能で、記録・グラフ機能自体には不要です）。</p>
+      <p>Gemini APIキーを登録すると、①検査結果の高精度読み取り、②保存データの考察生成が使えるようになります。</p>
       <ol>
         <li><a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a> にGoogleアカウントでログインする。</li>
-        <li>「Create API key」（APIキーを作成）をタップし、新しいキーを発行する。</li>
+        <li>「Create API key」をタップし、新しいキーを発行する。</li>
         <li>表示された <code>AIza...</code> から始まる文字列をコピーする。</li>
         <li>このアプリの「設定」タブを開き、「APIキー」欄に貼り付けて「保存」をタップする。</li>
-        <li>「接続テスト」で正常に接続できるか確認する。</li>
-        <li>「記録」タブで読み取り方法を「Gemini API」に切り替えると高精度読み取りが使え、「考察」タブでは常にGeminiが使われます。</li>
       </ol>
-      <div class="note">
-        ・APIキーはこの端末のブラウザ内にのみ保存され、Gemini APIへの通信以外には送信されません。<br>
-        ・無料枠には1分あたり／1日あたりのリクエスト数上限があり、超えると「429エラー」が出ます。その場合は少し時間を置くか、Google AI Studioで課金を有効にしてください。<br>
-        ・考察結果は一般的な情報整理であり、医師の診断・指示に代わるものではありません。
-      </div>
     `
   }
 };
@@ -378,14 +399,19 @@ document.getElementById('infoModalOverlay').addEventListener('click', (e)=>{
 });
 
 /* ================= Version ================= */
-// Bump on every meaningful change to index.html; keep in sync with CACHE in sw.js.
-const APP_VERSION = '1.5.0';
+const APP_VERSION = '1.6.0';
 document.getElementById('versionBadge').textContent = 'v' + APP_VERSION;
 window.addEventListener('DOMContentLoaded', ()=>{
   const av = document.getElementById('aboutVersion');
   if(av) av.textContent = 'v' + APP_VERSION;
   const hwDate = document.getElementById('hwDate');
   if(hwDate) hwDate.value = new Date().toISOString().slice(0,10);
+
+  // Load patient info & gas url into UI
+  const cfg = loadCfg();
+  if(document.getElementById('patientAge')) document.getElementById('patientAge').value = cfg.age || '';
+  if(document.getElementById('patientDisease')) document.getElementById('patientDisease').value = cfg.disease || '';
+  if(document.getElementById('gasUrlInput')) document.getElementById('gasUrlInput').value = cfg.gasUrl || '';
 });
 (async ()=>{
   const swEl = document.getElementById('aboutSw');
@@ -424,20 +450,23 @@ document.querySelectorAll('.tab').forEach(t=>{
   });
 });
 
-/* ================= Settings ================= */
+/* ================= Settings & Patient Info ================= */
 const apiKeyInput = document.getElementById('apiKeyInput');
 const modelInput = document.getElementById('modelInput');
 (function initSettings(){
   const cfg = loadCfg();
   apiKeyInput.value = cfg.apiKey || '';
-  modelInput.value = cfg.model || 'gemini-2.0-flash';
+  modelInput.value = cfg.model || 'gemini-flash-lite-latest';
 })();
 document.getElementById('saveKeyBtn').addEventListener('click', ()=>{
-  saveCfg({ apiKey: apiKeyInput.value.trim(), model: modelInput.value.trim() || 'gemini-2.0-flash' });
+  const cfg = loadCfg();
+  cfg.apiKey = apiKeyInput.value.trim();
+  cfg.model = modelInput.value.trim() || 'gemini-flash-lite-latest';
+  saveCfg(cfg);
   showStatus('keyStatus','ok','保存しました。');
 });
 document.getElementById('testKeyBtn').addEventListener('click', async ()=>{
-  const cfg = { apiKey: apiKeyInput.value.trim(), model: modelInput.value.trim() || 'gemini-2.0-flash' };
+  const cfg = { apiKey: apiKeyInput.value.trim(), model: modelInput.value.trim() || 'gemini-flash-lite-latest' };
   showStatus('keyStatus','info','接続確認中…');
   try{
     await callGemini(cfg, [{ text: 'こんにちは、と一言だけ日本語で返してください。' }]);
@@ -447,8 +476,24 @@ document.getElementById('testKeyBtn').addEventListener('click', async ()=>{
   }
 });
 
+document.getElementById('savePatientInfoBtn').addEventListener('click', ()=>{
+  const cfg = loadCfg();
+  cfg.age = document.getElementById('patientAge').value.trim();
+  cfg.disease = document.getElementById('patientDisease').value.trim();
+  saveCfg(cfg);
+  showStatus('patientStatus','ok','患者情報を保存しました。');
+});
+
+document.getElementById('saveGasUrlBtn').addEventListener('click', ()=>{
+  const cfg = loadCfg();
+  cfg.gasUrl = document.getElementById('gasUrlInput').value.trim();
+  saveCfg(cfg);
+  showStatus('sheetsStatus','ok','GAS URLを保存しました。');
+});
+
 function showStatus(id, type, msg){
   const el = document.getElementById(id);
+  if(!el) return;
   el.textContent = msg;
   el.className = 'status show ' + type;
 }
@@ -456,7 +501,7 @@ function showStatus(id, type, msg){
 /* ================= Gemini call helper ================= */
 async function callGemini(cfg, parts){
   if(!cfg.apiKey) throw new Error('APIキーが未登録です。設定タブで登録してください。');
-  const model = cfg.model || 'gemini-2.0-flash';
+  const model = cfg.model || 'gemini-flash-lite-latest';
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(cfg.apiKey)}`;
   const res = await fetch(url, {
     method:'POST',
@@ -483,7 +528,7 @@ function fileToBase64(file){
   });
 }
 
-/* ================= Upload & OCR extraction ================= */
+/* ================= Upload & Extraction (Feature ①: Ignore missing values) ================= */
 const dropzone = document.getElementById('dropzone');
 const fileInput = document.getElementById('fileInput');
 dropzone.addEventListener('click', ()=> fileInput.click());
@@ -497,35 +542,38 @@ async function handleFile(e){
   const method = document.getElementById('extractMethod').value;
   document.getElementById('previewCard').style.display = 'none';
   try{
-    const parsed = (method === 'gemini')
+    let parsed = (method === 'gemini')
       ? await extractViaGemini(file)
       : await extractViaOcr(file);
+    
+    // Feature ①: Ignore items with missing values
+    if(parsed && parsed.items){
+      parsed.items = parsed.items.filter(it => it.value !== undefined && it.value !== null && String(it.value).trim() !== '' && String(it.value).trim() !== '-' && String(it.value).trim() !== '—');
+    }
+
     pendingExtraction = parsed;
     showPreview(parsed);
-    showStatus('ocrStatus','ok','読み取りが完了しました。内容を確認して保存してください。');
+    showStatus('ocrStatus','ok','読み取りが完了しました（未記載項目は除外済み）。内容を確認して保存してください。');
   }catch(err){
     showStatus('ocrStatus','error','読み取りに失敗しました：' + err.message);
   }
   fileInput.value = '';
 }
 
-/* ---- Method A: Gemini API ---- */
 async function extractViaGemini(file){
   const cfg = loadCfg();
   showStatus('ocrStatus','info','<span class="spinner"></span>Geminiで読み取り中…');
   if(!cfg.apiKey) throw new Error('先に設定タブでGemini APIキーを登録してください。');
   const base64 = await fileToBase64(file);
-  const prompt = `これは血液検査・尿検査などの検体検査結果報告書の画像またはPDFです（複数ページの場合は全ページを対象にしてください）。
-表内の各検査項目について「検査項目名」「測定値」「基準値」「単位」を読み取り、次のJSON形式のみで出力してください。前置きや説明文、マークダウンのコードフェンスは一切不要です。
+  const prompt = `これは血液検査・尿検査などの検体検査結果報告書の画像またはPDFです。
+表内の各検査項目について「検査項目名」「測定値」「基準値」「単位」を読み取り、測定値が未記載・空欄の項目は除外して、次のJSON形式のみで出力してください。前置きや説明文、マークダウンコードフェンスは不要です。
 
 {
   "date": "YYYY-MM-DD (採取日。読み取れない場合は空文字)",
   "items": [
-    {"name": "項目名", "value": "測定値（数値部分のみ、H/L等の記号は除く）", "flag": "H, L, または空文字", "ref": "基準値（例: 6.70-8.30）", "unit": "単位"}
+    {"name": "項目名", "value": "測定値（数値部分のみ）", "flag": "H, L, または空文字", "ref": "基準値", "unit": "単位"}
   ]
-}
-
-数値でない項目（陰性/陽性など）はvalueにそのまま文字列を入れてください。基準値欄が空欄の項目はrefを空文字にしてください。`;
+}`;
   const text = await callGemini(cfg, [
     { text: prompt },
     { inline_data: { mime_type: file.type || 'image/jpeg', data: base64 } }
@@ -534,9 +582,8 @@ async function extractViaGemini(file){
   return JSON.parse(jsonStr);
 }
 
-/* ---- Method B: built-in OCR (no API key) ---- */
 async function extractViaOcr(file){
-  showStatus('ocrStatus','info','<span class="spinner"></span>OCR準備中…（初回は言語データの取得に時間がかかります）');
+  showStatus('ocrStatus','info','<span class="spinner"></span>OCR準備中…');
   const canvases = await fileToPageCanvases(file);
   let allItems = [];
   let dateStr = '';
@@ -581,14 +628,7 @@ function loadImageFile(file){
   });
 }
 
-// This report format is a two-column table per page; splitting left/right keeps row alignment
-// clean for OCR. If a different layout is used, extraction quality may drop — always review
-// the preview step before saving.
 async function ocrCanvas(canvas){
-  const fullCtx = canvas.getContext('2d');
-  const fullData = fullCtx.getImageData(0,0,canvas.width,canvas.height);
-
-  // header strip (top ~18%) for date, run once on full width for readability
   const headerCanvas = document.createElement('canvas');
   headerCanvas.width = canvas.width; headerCanvas.height = Math.floor(canvas.height*0.18);
   headerCanvas.getContext('2d').drawImage(canvas,0,0);
@@ -639,7 +679,6 @@ function groupWordsIntoLines(words){
 const UNIT_RE = /^[a-zA-Zμ%℃][a-zA-Zμ%℃0-9\/\.\^]*$/;
 const FLAG_RE = /^(HH|LL|H|L)$/;
 const VALUE_RE = /^\(?[-+±]?\d+\.?\d*\)?$/;
-const REF_RE = /^[\d.]+\s*[-~]\s*[\d.]+$|以下$|以上$/;
 
 function linesToItems(lines){
   const items = [];
@@ -651,9 +690,10 @@ function linesToItems(lines){
     while(i < tokens.length && !VALUE_RE.test(tokens[i]) && !/^\(?[-±+]\)?$/.test(tokens[i])){
       nameTokens.push(tokens[i]); i++;
     }
-    if(!nameTokens.length || i >= tokens.length) return; // couldn't find a value token
+    if(!nameTokens.length || i >= tokens.length) return;
     const name = nameTokens.join('');
     const value = tokens[i].replace(/[()]/g,''); i++;
+    if(!value || value === '-' || value === '—') return; // Feature ①: ignore missing values
     let flag = '';
     if(i < tokens.length && FLAG_RE.test(tokens[i])){ flag = tokens[i]; i++; }
     let ref = '';
@@ -663,7 +703,7 @@ function linesToItems(lines){
     let unit = '';
     const tail = tokens[tokens.length-1];
     if(UNIT_RE.test(tail) && tail !== value) unit = tail;
-    if(!name || name.length > 20) return; // guard against garbage lines
+    if(!name || name.length > 20) return;
     items.push({ name, value, flag, ref, unit });
   });
   return items;
@@ -699,18 +739,18 @@ document.getElementById('saveRecordBtn').addEventListener('click', ()=>{
   showStatus('ocrStatus','ok','保存しました。「グラフ」タブで推移を確認できます。');
 });
 
-// Adds items to the record for a given date, merging into an existing same-date
-// record (replacing same-named items) rather than creating duplicate date entries.
 function mergeItemsIntoDate(date, newItems){
   const recs = loadRecords();
   const existing = recs.find(r => r.date === date);
+  // Feature ①: ensure saved items also filter out missing values
+  const validNewItems = newItems.filter(ni => ni.value !== undefined && ni.value !== null && String(ni.value).trim() !== '' && String(ni.value).trim() !== '-' && String(ni.value).trim() !== '—');
   if(existing){
-    newItems.forEach(ni=>{
+    validNewItems.forEach(ni=>{
       const idx = existing.items.findIndex(it => it.name === ni.name);
       if(idx >= 0) existing.items[idx] = ni; else existing.items.push(ni);
     });
   } else {
-    recs.push({ id: Date.now(), date, items: newItems });
+    recs.push({ id: Date.now(), date, items: validNewItems });
   }
   recs.sort((a,b)=> a.date.localeCompare(b.date));
   saveRecords(recs);
@@ -724,33 +764,44 @@ document.getElementById('saveHwBtn').addEventListener('click', ()=>{
     showStatus('hwStatus','error','身長または体重のどちらかを入力してください。');
     return;
   }
-  if((h && isNaN(parseFloat(h))) || (w && isNaN(parseFloat(w)))){
-    showStatus('hwStatus','error','数値で入力してください。');
-    return;
-  }
   const items = [];
   if(h) items.push({ name:'身長', value:h, flag:'', ref:'', unit:'cm' });
   if(w) items.push({ name:'体重', value:w, flag:'', ref:'', unit:'kg' });
   mergeItemsIntoDate(date, items);
   document.getElementById('hwHeight').value = '';
   document.getElementById('hwWeight').value = '';
-  showStatus('hwStatus','ok','記録しました。「グラフ」タブで推移を確認できます。');
+  showStatus('hwStatus','ok','記録しました。');
 });
 
-/* ================= Graph view ================= */
+/* ================= Graph view (Feature ②: Default items & multi selection) ================= */
 let chartInstance = null;
-let selectedItems = []; // up to 3 item names, in selection order
-const CHART_COLORS = ['#3E7C8C', '#B3432B', '#B5651D'];
+let selectedItems = null; // initialized to default items on first load
+const DEFAULT_GRAPH_ITEMS = ['身長', '体重', 'CRE', 'eGFR', 'Ca', 'Li', 'Na', 'PH'];
+const CHART_COLORS = ['#3E7C8C', '#B3432B', '#B5651D', '#2A6B45', '#7A3EE1', '#E13EA3', '#3EA3E1', '#D4AC0D', '#27AE60', '#8E44AD'];
 
 function renderGraphView(){
   const recs = loadRecords();
-  const names = new Map(); // name -> hasFlag
+  const names = new Map();
   recs.forEach(r => r.items.forEach(it=>{
     const prev = names.get(it.name) || false;
     names.set(it.name, prev || it.flag === 'H' || it.flag === 'L');
   }));
-  // drop any previously-selected names that no longer exist
-  selectedItems = selectedItems.filter(n => names.has(n));
+
+  // If selectedItems is null (first run), initialize with default items present in data (case-insensitive match)
+  if(selectedItems === null){
+    const availableNames = [...names.keys()];
+    selectedItems = [];
+    DEFAULT_GRAPH_ITEMS.forEach(def => {
+      const found = availableNames.find(an => an.toLowerCase() === def.toLowerCase() || an.toUpperCase() === def.toUpperCase());
+      if(found) selectedItems.push(found);
+    });
+    // If none of the defaults exist yet in records, pick available or empty
+    if(selectedItems.length === 0){
+      selectedItems = availableNames.slice(0, 3);
+    }
+  } else {
+    selectedItems = selectedItems.filter(n => names.has(n));
+  }
 
   const chipRow = document.getElementById('itemChips');
   chipRow.innerHTML = '';
@@ -763,10 +814,6 @@ function renderGraphView(){
       if(isActive){
         selectedItems = selectedItems.filter(n => n !== name);
       } else {
-        if(selectedItems.length >= 3){
-          showStatus('chipStatus','error','グラフに重ねられるのは最大3項目までです。');
-          return;
-        }
         selectedItems.push(name);
       }
       document.getElementById('chipStatus').classList.remove('show');
@@ -829,8 +876,7 @@ function drawChart(recs, names){
 
     scales[axisId] = {
       type:'linear',
-      position: idx === 0 ? 'left' : 'right',
-      offset: idx > 1,
+      position: idx % 2 === 0 ? 'left' : 'right',
       title: { display: !!unit, text: unit },
       grid: { drawOnChartArea: idx === 0 },
       ticks: { color }
@@ -848,14 +894,7 @@ function drawChart(recs, names){
       scales
     }
   });
-  document.getElementById('rangeNote').textContent = notes.join('　|　');
-}
-
-function parseRef(ref){
-  if(!ref) return null;
-  const m = ref.match(/([\-\d.]+)\s*[-~]\s*([\-\d.]+)/);
-  if(m) return { min: parseFloat(m[1]), max: parseFloat(m[2]) };
-  return null;
+  document.getElementById('rangeNote').textContent = notes.join(' | ');
 }
 
 function renderRecordList(recs){
@@ -879,7 +918,7 @@ function renderRecordList(recs){
   });
 }
 
-/* ================= AI commentary ================= */
+/* ================= AI commentary (Feature ③: Factor in Age and Disease name) ================= */
 document.getElementById('runAnalysisBtn').addEventListener('click', async ()=>{
   const cfg = loadCfg();
   const recs = loadRecords();
@@ -888,11 +927,20 @@ document.getElementById('runAnalysisBtn').addEventListener('click', async ()=>{
   if(!recs.length){ showStatus('aiStatus','error','記録データがありません。'); return; }
   showStatus('aiStatus','info','<span class="spinner"></span>考察を生成中…');
   try{
+    const age = cfg.age || document.getElementById('patientAge').value.trim() || '未設定';
+    const disease = cfg.disease || document.getElementById('patientDisease').value.trim() || '未設定';
+
     const summary = recs.map(r=>{
       const items = r.items.map(i=> `${i.name}: ${i.value}${i.flag?'('+i.flag+')':''} [基準値:${i.ref||'-'} ${i.unit||''}]`).join(', ');
       return `■ ${r.date}\n${items}`;
     }).join('\n\n');
-    const prompt = `以下は同一人物の検体検査結果の時系列データです。医療従事者ではなく、記録を見返す保護者/本人向けに、下記の観点で日本語で簡潔にまとめてください。
+
+    const prompt = `患者情報:
+- 年齢: ${age}
+- 病名・主訴: ${disease}
+
+以下は同一人物の検体検査結果の時系列データです。上記の患者情報（年齢や病名）を十分に踏まえつつ、医療従事者ではなく記録を見返す保護者/本人向けに、下記の観点で日本語で簡潔にまとめてください。
+- 年齢や病名（${disease}）の観点からみた検査値の解釈や留意点
 - 基準値から外れている項目とその推移（改善/悪化/横ばい）
 - 複数回にわたり基準値外が続いている項目があれば特に触れる
 - 全体的な傾向として気になる点
@@ -900,6 +948,7 @@ document.getElementById('runAnalysisBtn').addEventListener('click', async ()=>{
 
 データ:
 ${summary}`;
+
     const text = await callGemini(cfg, [{ text: prompt }]);
     out.textContent = text;
     out.style.display = 'block';
@@ -909,7 +958,56 @@ ${summary}`;
   }
 });
 
-/* ================= Data management ================= */
+/* ================= Data Management & CSV / GAS Export (Feature ④) ================= */
+function recordsToCsv(recs){
+  let csv = '日付,項目名,測定値,H/L,基準値,単位\n';
+  recs.forEach(r => {
+    r.items.forEach(it => {
+      csv += `"${r.date}","${it.name}","${it.value}","${it.flag || ''}","${it.ref || ''}","${it.unit || ''}"\n`;
+    });
+  });
+  return csv;
+}
+
+document.getElementById('exportCsvBtn').addEventListener('click', ()=>{
+  const recs = loadRecords();
+  if(!recs.length){ showStatus('dataStatus','error','エクスポートするデータがありません。'); return; }
+  const csv = recordsToCsv(recs);
+  const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csv], { type:'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `labtracker_data_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  showStatus('dataStatus','ok','CSVファイルをダウンロードしました。');
+});
+
+document.getElementById('syncSheetsBtn').addEventListener('click', async ()=>{
+  const cfg = loadCfg();
+  const gasUrl = cfg.gasUrl || document.getElementById('gasUrlInput').value.trim();
+  if(!gasUrl){
+    showStatus('sheetsStatus','error','Googleスプレッドシート連携用のGAS URLが未入力です。設定をご確認ください。');
+    return;
+  }
+  const recs = loadRecords();
+  if(!recs.length){
+    showStatus('sheetsStatus','error','送信するデータがありません。');
+    return;
+  }
+  showStatus('sheetsStatus','info','<span class="spinner"></span>Googleスプレッドシートに送信中…');
+  try{
+    const csv = recordsToCsv(recs);
+    await fetch(gasUrl, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ csv, records: recs })
+    });
+    showStatus('sheetsStatus','ok','スプレッドシートへの送信リクエストを送信しました。');
+  }catch(e){
+    showStatus('sheetsStatus','error','送信に失敗しました：' + e.message);
+  }
+});
+
 document.getElementById('exportBtn').addEventListener('click', ()=>{
   const blob = new Blob([JSON.stringify(loadRecords(), null, 2)], { type:'application/json' });
   const a = document.createElement('a');
@@ -931,6 +1029,7 @@ document.getElementById('importFile').addEventListener('change', async (e)=>{
     existing.sort((a,b)=>a.date.localeCompare(b.date));
     saveRecords(existing);
     showStatus('dataStatus','ok','読み込みました。');
+    selectedItems = null; // reset graph selection cache
   }catch(err){
     showStatus('dataStatus','error','読み込みに失敗しました：' + err.message);
   }
@@ -939,14 +1038,15 @@ document.getElementById('importFile').addEventListener('change', async (e)=>{
 document.getElementById('clearAllBtn').addEventListener('click', ()=>{
   if(!confirm('全ての記録データを削除します。よろしいですか？')) return;
   saveRecords([]);
+  selectedItems = null;
   showStatus('dataStatus','ok','削除しました。');
   renderGraphView();
 });
 
-/* ================= PWA: service worker ================= */
+/* ================= PWA: Service Worker ================= */
 if('serviceWorker' in navigator){
   window.addEventListener('load', ()=>{
-    navigator.serviceWorker.register('sw.js').catch(()=>{ /* offline install optional */ });
+    navigator.serviceWorker.register('sw.js').catch(()=>{});
   });
 }
 </script>
